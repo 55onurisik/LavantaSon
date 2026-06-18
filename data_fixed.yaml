@@ -1,0 +1,6 @@
+train: C:/Users/Onur/Desktop/Projects/LavantaProject/train/images
+val: C:/Users/Onur/Desktop/Projects/LavantaProject/valid/images
+test: C:/Users/Onur/Desktop/Projects/LavantaProject/test/images
+
+nc: 2
+names: ['olgunlasmis', 'yetismemis']
