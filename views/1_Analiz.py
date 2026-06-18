@@ -8,10 +8,12 @@ rekolte/uçucu yağ/gelir, hasat hazırlık, HSV yoğunluk, zirai reçete, VRA G
 ve analiz geçmişine kayıt.
 """
 
+import base64
 import time
 import cv2
 import numpy as np
 import streamlit as st
+import streamlit.components.v1 as components
 from PIL import Image
 
 from color_classify import (
@@ -56,12 +58,6 @@ density_hsv_params = {
     "v_min": density_mod.DEFAULT_V_MIN,
     "v_max": density_mod.DEFAULT_V_MAX,
 }
-preview_opacity = st.sidebar.slider(
-    "Yoğunluk overlay gücü (%)",
-    min_value=20, max_value=100, value=65, step=5,
-    help="Tarla yoğunluk haritasındaki renklendirme kuvvetini ayarlar.",
-)
-
 if use_color:
     show_mask = st.sidebar.checkbox("Mor maske overlay göster", value=False)
     with st.sidebar.expander("Gelişmiş HSV Ayarları", expanded=False):
@@ -111,6 +107,93 @@ yolo_result = st.session_state["analiz_yolo_result"]
 img_bgr     = st.session_state["analiz_img_bgr"]
 proc_time   = st.session_state["analiz_proc_time"]
 dens        = density_mod.field_density(img_bgr, **density_hsv_params)
+
+
+def _jpeg_data_uri(image_rgb: np.ndarray) -> str:
+    """RGB görüntüyü karşılaştırma bileşeninde kullanılacak JPEG URI'ına çevirir."""
+    ok, encoded = cv2.imencode(
+        ".jpg",
+        cv2.cvtColor(image_rgb, cv2.COLOR_RGB2BGR),
+        [cv2.IMWRITE_JPEG_QUALITY, 90],
+    )
+    if not ok:
+        raise ValueError("Yoğunluk önizleme görüntüsü kodlanamadı.")
+    return "data:image/jpeg;base64," + base64.b64encode(encoded).decode("ascii")
+
+
+def render_density_compare(image_bgr: np.ndarray, overlay_rgb: np.ndarray) -> None:
+    """Ham görüntü ile yoğunluk overlay'ini sürüklenebilir yüzde ayarıyla karşılaştırır."""
+    raw_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
+    raw_uri = _jpeg_data_uri(raw_rgb)
+    overlay_uri = _jpeg_data_uri(overlay_rgb)
+    height, width = raw_rgb.shape[:2]
+    component_height = max(300, min(720, int(700 * height / max(width, 1)) + 70))
+
+    components.html(
+        f"""
+        <style>
+          * {{ box-sizing: border-box; }}
+          body {{ margin: 0; font-family: Arial, sans-serif; color: #4c1d95; }}
+          .compare {{
+            position: relative; width: 100%; aspect-ratio: {width} / {height};
+            overflow: hidden; border: 1px solid #ddd6fe; border-radius: 12px;
+            background: #111827; user-select: none;
+          }}
+          .compare img {{
+            position: absolute; inset: 0; width: 100%; height: 100%;
+            object-fit: contain; pointer-events: none;
+          }}
+          #density-overlay {{ clip-path: inset(0 50% 0 0); }}
+          #density-divider {{
+            position: absolute; top: 0; bottom: 0; left: 50%; width: 3px;
+            transform: translateX(-50%); background: #fbbf24;
+            box-shadow: 0 0 0 1px rgba(0,0,0,.25); pointer-events: none;
+          }}
+          #density-divider::after {{
+            content: "↔"; position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%); width: 34px; height: 34px;
+            display: grid; place-items: center; border-radius: 50%;
+            color: #1f2937; background: #fbbf24; border: 2px solid #fff;
+            font-weight: 700; box-shadow: 0 2px 8px rgba(0,0,0,.35);
+          }}
+          #density-slider {{
+            position: absolute; inset: 0; width: 100%; height: 100%;
+            margin: 0; opacity: 0; cursor: ew-resize;
+          }}
+          .labels {{
+            display: flex; justify-content: space-between; align-items: center;
+            gap: 8px; margin-top: 8px; font-size: 12px; font-weight: 700;
+          }}
+          #density-value {{ color: #6d28d9; white-space: nowrap; }}
+        </style>
+        <div class="compare">
+          <img src="{raw_uri}" alt="Ham drone görüntüsü">
+          <img id="density-overlay" src="{overlay_uri}" alt="Lavanta yoğunluk overlay görüntüsü">
+          <div id="density-divider"></div>
+          <input id="density-slider" type="range" min="0" max="100" value="50"
+                 aria-label="Yoğunluk karşılaştırma yüzdesi">
+        </div>
+        <div class="labels">
+          <span>AI YOĞUNLUK OVERLAY</span>
+          <span id="density-value">%50</span>
+          <span>HAM GÖRÜNTÜ</span>
+        </div>
+        <script>
+          const slider = document.getElementById("density-slider");
+          const overlay = document.getElementById("density-overlay");
+          const divider = document.getElementById("density-divider");
+          const value = document.getElementById("density-value");
+          slider.addEventListener("input", () => {{
+            const position = Number(slider.value);
+            overlay.style.clipPath = `inset(0 ${{100 - position}}% 0 0)`;
+            divider.style.left = `${{position}}%`;
+            value.textContent = `%${{position}}`;
+          }});
+        </script>
+        """,
+        height=component_height,
+        scrolling=False,
+    )
 
 # ── Filtre + çizim (slider değişiminde anında yeniden çalışır) ────────────────
 detections = detection.filter_boxes(
@@ -225,15 +308,9 @@ dc1.caption(
     f"S≥{dens['params']['s_min']}  V:{dens['params']['v_min']}-{dens['params']['v_max']}"
 )
 
-overlay_alpha = max(0.2, min(preview_opacity / 100.0, 1.0))
-density_preview = cv2.addWeighted(
-    cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB),
-    1.0 - (overlay_alpha * 0.45),
-    dens["overlay_rgb"],
-    overlay_alpha,
-    0,
-)
-dc2.image(density_preview, caption="Tarla yoğunluk overlay önizlemesi", width="stretch")
+with dc2:
+    render_density_compare(img_bgr, dens["overlay_rgb"])
+    st.caption("Ayırıcıyı sürükleyerek ham görüntü ile tarla yoğunluk overlay'ini karşılaştırın.")
 
 # ── Zirai karar destek (reçete) ──────────────────────────────────────────────
 theme.section("Akıllı Zirai Karar Destek (Reçete)", "Preskriptif agronomi motoru")
