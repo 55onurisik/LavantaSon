@@ -73,9 +73,16 @@ if use_color:
         hsv_params = dict(h_low=h_low, h_high=h_high, s_min=s_min, v_min=v_min, v_max=v_max)
 
 with st.sidebar.expander("Tarla Yoğunluk HSV Ayarları", expanded=False):
+    density_h_low, density_h_high = st.slider(
+        "Yoğunluk H aralığı",
+        min_value=0,
+        max_value=179,
+        value=(density_mod.DEFAULT_H_LOW, density_mod.DEFAULT_H_HIGH),
+        help="Bu drone veri seti için kalibre edilmiş önerilen aralık H:40-80'dir.",
+    )
     density_hsv_params = {
-        "h_low": st.slider("Yoğunluk H alt", 90, 150, density_mod.DEFAULT_H_LOW),
-        "h_high": st.slider("Yoğunluk H üst", 120, 179, density_mod.DEFAULT_H_HIGH),
+        "h_low": density_h_low,
+        "h_high": density_h_high,
         "s_min": st.slider("Yoğunluk S min", 0, 255, density_mod.DEFAULT_S_MIN),
         "v_min": st.slider("Yoğunluk V min", 0, 255, density_mod.DEFAULT_V_MIN),
         "v_max": st.slider("Yoğunluk V max", 80, 255, density_mod.DEFAULT_V_MAX),

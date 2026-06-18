@@ -1,21 +1,30 @@
 """
 Tarla geneli lavanta yoğunluğu (HSV segmentasyon).
 
-`omer/.../backend/main.py` içindeki opencv_preprocess mantığı: gerçek mor
-(H 120-160) piksel oranını hesaplar ve MAGMA renkli bir yoğunluk maskesi üretir.
-Bu, kök projedeki bbox-içi renk analizinden (H 40-80) bağımsız, tüm-görüntü
-yoğunluk ölçüsüdür.
+`omer/.../backend/main.py` içindeki opencv_preprocess mantığını tüm görüntüye
+uygular. HSV sınırları, bu drone veri setinde doğrulanmış bbox-içi renk
+sınıflandırıcısıyla ortak kullanılır; böylece olgunluk ve tarla yoğunluğu aynı
+renk kalibrasyonuna göre hesaplanır.
 """
 
 import cv2
 import numpy as np
 
-# Lavanta mor renk aralığı (OpenCV HSV, 0-180 hue)
-DEFAULT_H_LOW = 120
-DEFAULT_H_HIGH = 160
-DEFAULT_S_MIN = 30
-DEFAULT_V_MIN = 50
-DEFAULT_V_MAX = 255
+from color_classify import (
+    PURPLE_H_HIGH,
+    PURPLE_H_LOW,
+    PURPLE_S_MIN,
+    PURPLE_V_MAX,
+    PURPLE_V_MIN,
+)
+
+# Tek kalibrasyon kaynağı: renk sınıflandırıcısında %93 doğrulukla kullanılan
+# OpenCV HSV sınırları. Ayrı sabitler zamanla iki analizin sapmasını önler.
+DEFAULT_H_LOW = PURPLE_H_LOW
+DEFAULT_H_HIGH = PURPLE_H_HIGH
+DEFAULT_S_MIN = PURPLE_S_MIN
+DEFAULT_V_MIN = PURPLE_V_MIN
+DEFAULT_V_MAX = PURPLE_V_MAX
 
 
 def field_density(
