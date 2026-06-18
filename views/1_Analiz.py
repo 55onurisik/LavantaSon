@@ -40,15 +40,19 @@ has_wild = any(config.normalize_class(n) == "yabani_bitki" for n in model_names.
 st.sidebar.markdown("## Sınıflandırma Modu")
 use_color = st.sidebar.toggle(
     "Renk bazlı sınıflandırma",
-    value=False,
+    value=True,
     help="Açıkken YOLO bbox konumunu kullanır, sınıf kararı mor piksel oranına göre verilir.",
 )
 
 color_threshold = st.sidebar.slider(
-    "Olgunluk rengi eşiği (%)",
+    "Olgun sayma eşiği (%)",
     min_value=0, max_value=25, value=int(DEFAULT_THRESHOLD * 100), step=1,
-    help="YOLO kutusu içindeki mor piksel oranı. Önerilen aralık: %8-%12.",
+    help="Bir YOLO kutusundaki kalibre edilmiş renk yoğunluğu bu değere eşit veya yüksekse bitki olgun sayılır. Önerilen aralık: %8-%12.",
 ) / 100.0
+st.sidebar.caption(
+    f"Renk yoğunluğu ≥ %{color_threshold * 100:.0f} → Olgunlaşmış · "
+    f"< %{color_threshold * 100:.0f} → Yetişmemiş"
+)
 show_mask = False
 hsv_params: dict = {}
 density_hsv_params = {
@@ -59,7 +63,7 @@ density_hsv_params = {
     "v_max": density_mod.DEFAULT_V_MAX,
 }
 if use_color:
-    show_mask = st.sidebar.checkbox("Mor maske overlay göster", value=False)
+    show_mask = st.sidebar.checkbox("Tespitlerde mor maske göster", value=True)
     with st.sidebar.expander("Gelişmiş HSV Ayarları", expanded=False):
         h_low  = st.slider("H alt",  0,  60, PURPLE_H_LOW)
         h_high = st.slider("H üst", 60, 120, PURPLE_H_HIGH)
@@ -121,13 +125,11 @@ def _jpeg_data_uri(image_rgb: np.ndarray) -> str:
     return "data:image/jpeg;base64," + base64.b64encode(encoded).decode("ascii")
 
 
-def render_density_compare(image_bgr: np.ndarray, overlay_rgb: np.ndarray) -> None:
-    """Ham görüntü ile yoğunluk overlay'ini sürüklenebilir yüzde ayarıyla karşılaştırır."""
+def render_density_compare(image_bgr: np.ndarray) -> None:
+    """Ham görüntüyü Ömer arayüzündeki spektral filtreyle karşılaştırır."""
     raw_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
     raw_uri = _jpeg_data_uri(raw_rgb)
-    overlay_uri = _jpeg_data_uri(overlay_rgb)
-    height, width = raw_rgb.shape[:2]
-    component_height = max(300, min(720, int(700 * height / max(width, 1)) + 70))
+    component_height = 560
 
     components.html(
         f"""
@@ -135,15 +137,23 @@ def render_density_compare(image_bgr: np.ndarray, overlay_rgb: np.ndarray) -> No
           * {{ box-sizing: border-box; }}
           body {{ margin: 0; font-family: Arial, sans-serif; color: #4c1d95; }}
           .compare {{
-            position: relative; width: 100%; aspect-ratio: {width} / {height};
+            position: relative; width: 100%; aspect-ratio: 4 / 3;
             overflow: hidden; border: 1px solid #ddd6fe; border-radius: 12px;
             background: #111827; user-select: none;
           }}
           .compare img {{
             position: absolute; inset: 0; width: 100%; height: 100%;
-            object-fit: contain; pointer-events: none;
+            object-fit: cover; pointer-events: none;
           }}
-          #density-overlay {{ clip-path: inset(0 50% 0 0); }}
+          #density-overlay {{
+            clip-path: inset(0 50% 0 0);
+            filter: hue-rotate(270deg) saturate(2.5) contrast(1.8) brightness(.7);
+          }}
+          #density-tint {{
+            position: absolute; inset: 0; clip-path: inset(0 50% 0 0);
+            background: linear-gradient(to bottom, rgba(88, 28, 135, .45), transparent 70%);
+            mix-blend-mode: overlay; pointer-events: none;
+          }}
           #density-divider {{
             position: absolute; top: 0; bottom: 0; left: 50%; width: 3px;
             transform: translateX(-50%); background: #fbbf24;
@@ -168,7 +178,8 @@ def render_density_compare(image_bgr: np.ndarray, overlay_rgb: np.ndarray) -> No
         </style>
         <div class="compare">
           <img src="{raw_uri}" alt="Ham drone görüntüsü">
-          <img id="density-overlay" src="{overlay_uri}" alt="Lavanta yoğunluk overlay görüntüsü">
+          <img id="density-overlay" src="{raw_uri}" alt="Mor spektral overlay görüntüsü">
+          <div id="density-tint"></div>
           <div id="density-divider"></div>
           <input id="density-slider" type="range" min="0" max="100" value="50"
                  aria-label="Yoğunluk karşılaştırma yüzdesi">
@@ -181,11 +192,13 @@ def render_density_compare(image_bgr: np.ndarray, overlay_rgb: np.ndarray) -> No
         <script>
           const slider = document.getElementById("density-slider");
           const overlay = document.getElementById("density-overlay");
+          const tint = document.getElementById("density-tint");
           const divider = document.getElementById("density-divider");
           const value = document.getElementById("density-value");
           slider.addEventListener("input", () => {{
             const position = Number(slider.value);
             overlay.style.clipPath = `inset(0 ${{100 - position}}% 0 0)`;
+            tint.style.clipPath = `inset(0 ${{100 - position}}% 0 0)`;
             divider.style.left = `${{position}}%`;
             value.textContent = `%${{position}}`;
           }});
@@ -309,8 +322,8 @@ dc1.caption(
 )
 
 with dc2:
-    render_density_compare(img_bgr, dens["overlay_rgb"])
-    st.caption("Ayırıcıyı sürükleyerek ham görüntü ile tarla yoğunluk overlay'ini karşılaştırın.")
+    render_density_compare(img_bgr)
+    st.caption("Ayırıcıyı sürükleyerek ham görüntü ile Ömer projesindeki mor spektral overlay'i karşılaştırın.")
 
 # ── Zirai karar destek (reçete) ──────────────────────────────────────────────
 theme.section("Akıllı Zirai Karar Destek (Reçete)", "Preskriptif agronomi motoru")
