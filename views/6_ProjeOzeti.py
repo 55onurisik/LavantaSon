@@ -1,220 +1,147 @@
 # -*- coding: utf-8 -*-
-"""
-Proje Özeti — YMH455 Bitirme Projesi geliştirme hikayesi.
+"""Lavanta AI uygulamasının güncel proje özeti."""
 
-Veri kalitesi analizi, iki eğitim karşılaştırması ve sınıf bazlı sonuçlar.
-"""
-
-import pandas as pd
 import streamlit as st
 
-from lavanta import theme
+from color_classify import DEFAULT_THRESHOLD
+from lavanta import config, density, theme
 
 theme.inject()
 
 st.title("Proje Özeti")
-st.caption("YMH455 Bitirme Projesi · Mustafa BAL (220541003) · 2026")
+st.caption("Drone görüntülerinden lavanta olgunluğu, yabani ot, tarla yoğunluğu ve rekolte analizi")
 
-# ── Proje Hakkında ────────────────────────────────────────────────────────────
-theme.section("Projenin Amacı")
-
-c1, c2 = st.columns([3, 2])
-
-with c1:
-    st.markdown(
-        "Bu proje, **DJI drone** ile çekilen lavanta tarlası görüntülerinden "
-        "**yabancı ot tespiti** yapmayı amaçlamaktadır. Geliştirilen sistem; "
-        "tarla sahiplerinin hangi bölgede yabancı ot bulunduğunu otomatik "
-        "tespit etmesine ve tarla sağlığını uzaktan izlemesine olanak tanır."
-    )
-    st.markdown(
-        "Çalışmada **YOLOv11n** mimarisi, **Google Colab** ortamında "
-        "Tesla T4 GPU üzerinde eğitilmiştir."
-    )
-
-    theme.section("Sistem Pipeline")
-    adimlar = [
-        ("🚁", "DJI Drone Görüntüsü",   "Lavanta tarlası üzerinde uçuş"),
-        ("🏷️", "Roboflow Etiketleme",   "Manuel bounding box çizimi"),
-        ("🧹", "Veri Temizleme",         "39.119 gereksiz etiket + 8.434 hatalı bbox silindi"),
-        ("🧠", "YOLOv11n Eğitimi",      "Google Colab, Tesla T4, 94 epoch"),
-        ("✅", "Tespit & Analiz",        "mAP %55.8, F1 %56.1"),
-    ]
-    for i, (ikon, baslik, alt) in enumerate(adimlar):
-        ok = "→" if i < len(adimlar) - 1 else ""
-        st.markdown(
-            f"<div style='background:#f5f3ff;border-left:3px solid #7c3aed;"
-            f"border-radius:0 8px 8px 0;padding:9px 14px;margin-bottom:6px;'>"
-            f"<span style='font-size:1.1rem;'>{ikon}</span>&nbsp;"
-            f"<b style='color:#2e1065;'>{baslik}</b>&nbsp;"
-            f"<span style='color:#6d28d9;font-size:0.8rem;'>— {alt}</span>"
-            f"</div>",
-            unsafe_allow_html=True,
-        )
-
-with c2:
-    theme.section("Tespit Sınıfları")
-    siniflar = [
-        ("#7c3aed", "#f5f3ff", "olgunlasmis",  "Olgunlaşmış lavanta", "81.2"),
-        ("#dc2626", "#fef2f2", "yabani_bitki",  "Yabancı ot / weed",   "41.4"),
-        ("#d97706", "#fffbeb", "yetismemis",    "Yetişmemiş lavanta",  "44.9"),
-    ]
-    for clr, bg, sinif, aciklama, map_val in siniflar:
-        pct = float(map_val)
-        st.markdown(
-            f"<div style='background:{bg};border:1px solid {clr}33;"
-            f"border-radius:10px;padding:12px 14px;margin-bottom:8px;'>"
-            f"<span style='color:{clr};font-weight:700;font-size:0.85rem;'>{sinif}</span>"
-            f"<div style='color:#444;font-size:0.8rem;margin-top:2px;'>{aciklama}</div>"
-            f"<div style='background:#e5e7eb;border-radius:999px;height:10px;"
-            f"overflow:hidden;margin-top:8px;'>"
-            f"<div style='width:{pct}%;height:100%;background:{clr};"
-            f"border-radius:999px;'></div></div>"
-            f"<div style='font-size:0.75rem;color:{clr};font-weight:600;"
-            f"margin-top:3px;'>mAP@0.50: %{map_val}</div>"
-            f"</div>",
-            unsafe_allow_html=True,
-        )
-
-    theme.section("Veri Seti (v12)")
-    veri = [("Eğitim", 2285, "#7c3aed"), ("Doğrulama", 131, "#2563eb"), ("Test", 65, "#d97706")]
-    toplam = 2481
-    for ad, sayi, clr in veri:
-        pct = sayi / toplam * 100
-        st.markdown(
-            f"<div style='display:flex;justify-content:space-between;"
-            f"font-size:0.82rem;margin-bottom:2px;'>"
-            f"<span style='color:#444;'>{ad}</span>"
-            f"<span style='font-weight:600;color:{clr};'>{sayi:,}</span></div>"
-            f"<div style='background:#e5e7eb;border-radius:999px;height:9px;"
-            f"overflow:hidden;margin-bottom:8px;'>"
-            f"<div style='width:{pct:.0f}%;height:100%;background:{clr};"
-            f"border-radius:999px;'></div></div>",
-            unsafe_allow_html=True,
-        )
-    st.caption(f"Toplam: {toplam:,} görsel")
-
-# ── Eğitim Karşılaştırması ───────────────────────────────────────────────────
 theme.section(
-    "Eğitim Karşılaştırması",
-    "Ham veri → Veri temizleme → Temiz veri: tek adım, +%19.1 mAP artışı",
+    "Projenin Amacı",
+    "Tek bir drone görüntüsünden sahada uygulanabilir tarımsal karar desteği üretmek",
+)
+st.markdown(
+    "Lavanta AI; yüksek çözünürlüklü tarla görüntülerini **YOLOv11**, renk tabanlı "
+    "olgunluk analizi ve **OpenCV HSV segmentasyonu** ile işler. Sistem yalnızca nesne "
+    "tespiti yapmakla kalmaz; olgunluk, yabani ot oranı, tarla yoğunluğu, tahmini yaş "
+    "çiçek verimi, uçucu yağ ve gelir sonuçlarını tek analizde birleştirir."
 )
 
-metrikler = [
-    ("mAP@0.50",  36.7, 55.8),
-    ("Precision", 40.9, 55.2),
-    ("Recall",    42.4, 57.1),
-    ("F1 Score",  41.6, 56.1),
+k1, k2, k3, k4 = st.columns(4)
+k1.metric("Model", "YOLOv11")
+k2.metric("Tespit Sınıfı", len(config.CLASSES))
+k3.metric("Olgunluk Eşiği", f"%{DEFAULT_THRESHOLD * 100:.0f}")
+k4.metric("Yoğunluk HSV", f"H:{density.DEFAULT_H_LOW}-{density.DEFAULT_H_HIGH}")
+
+theme.section("Sistemin Ürettiği Sonuçlar")
+f1, f2 = st.columns(2)
+
+with f1:
+    st.markdown("#### Görüntü ve bitki analizi")
+    st.markdown(
+        "- Olgunlaşmış ve yetişmemiş lavanta tespiti\n"
+        "- Yabani ot tespiti ve tarla içindeki oranı\n"
+        "- Ayarlanabilir renk yoğunluğu eşiğiyle yeniden sınıflandırma\n"
+        "- Kalibre edilmiş HSV aralığıyla tarla yoğunluğu hesabı\n"
+        "- Ham görüntü ve mor spektral overlay karşılaştırıcısı"
+    )
+
+with f2:
+    st.markdown("#### Tarımsal karar desteği")
+    st.markdown(
+        "- Hasat hazırlık yüzdesi ve zamanlama önerisi\n"
+        "- Yaş çiçek, uçucu yağ ve gelir tahmini\n"
+        "- Yoğunluk ve yabani ot durumuna göre zirai reçete\n"
+        "- Traktör sistemleri için GeoJSON/VRA çıktısı\n"
+        "- Analiz geçmişi ve özet paneli"
+    )
+
+theme.section(
+    "Analiz Akışı",
+    "Yüklenen görüntüden raporlanabilir sonuca kadar çalışan işlem hattı",
+)
+
+steps = [
+    ("1", "Görüntü Girişi", "JPG veya PNG drone görüntüsü RGB/BGR formatına hazırlanır."),
+    ("2", "YOLOv11 Tespiti", "Bitkiler üç operasyonel sınıfta konumlandırılır ve sayılır."),
+    ("3", "Renk Kalibrasyonu", "Her lavanta kutusundaki renk yoğunluğu seçilen eşikle karşılaştırılır."),
+    ("4", "Tarla Yoğunluğu", "Tüm görüntü H:40-80 kalibrasyonuyla segmentlere ayrılır."),
+    ("5", "Rekolte ve Ekonomi", "Olgun bitki sayısından yaş çiçek, yağ ve gelir hesaplanır."),
+    ("6", "Karar ve Kayıt", "Zirai öneri, VRA çıktısı ve analiz geçmişi oluşturulur."),
 ]
 
-col_m, col_g = st.columns([2, 3])
-
-with col_m:
-    for isim, ham, temiz in metrikler:
-        delta = temiz - ham
-        st.markdown(
-            f"<div style='background:#ffffff;border:1px solid #ece9fb;"
-            f"border-radius:12px;padding:13px 16px;margin-bottom:8px;"
-            f"box-shadow:0 1px 2px rgba(124,58,237,0.05);'>"
-            f"<div style='display:flex;justify-content:space-between;'>"
-            f"<span style='font-weight:600;color:#2e1065;'>{isim}</span>"
-            f"<span style='color:#16a34a;font-weight:700;'>+{delta:.1f}%</span>"
-            f"</div>"
-            f"<div style='font-size:0.75rem;color:#888;margin:5px 0 3px;'>1. Eğitim (Ham Veri)</div>"
-            f"<div style='background:#e5e7eb;border-radius:999px;height:9px;overflow:hidden;'>"
-            f"<div style='width:{ham}%;height:100%;background:#9ca3af;border-radius:999px;'></div></div>"
-            f"<div style='font-size:0.75rem;color:#888;margin:5px 0 3px;'>2. Eğitim (Temiz Veri)</div>"
-            f"<div style='background:#ede9fe;border-radius:999px;height:9px;overflow:hidden;'>"
-            f"<div style='width:{temiz}%;height:100%;background:#7c3aed;border-radius:999px;'></div></div>"
-            f"</div>",
-            unsafe_allow_html=True,
-        )
-
-with col_g:
-    grafik = pd.DataFrame(
-        {
-            "1. Eğitim (Ham)":   [m[1] for m in metrikler],
-            "2. Eğitim (Temiz)": [m[2] for m in metrikler],
-        },
-        index=[m[0] for m in metrikler],
-    )
-    st.bar_chart(grafik, height=270, color=["#9ca3af", "#7c3aed"])
-
-    theme.tip(
-        "<b>Temel Bulgu:</b> Veri temizliği tek başına <b>+%19.1 mAP</b> artışı sağladı. "
-        "Model mimarisi değil, <b>veri kalitesi</b> belirleyici oldu.",
-        kind="ok",
+for number, title, description in steps:
+    st.markdown(
+        f"<div style='display:flex;gap:12px;align-items:flex-start;background:#fff;"
+        f"border:1px solid #ede9fe;border-radius:10px;padding:11px 14px;margin-bottom:7px;'>"
+        f"<div style='min-width:28px;height:28px;border-radius:50%;display:grid;place-items:center;"
+        f"background:#7c3aed;color:white;font-weight:700;'>{number}</div>"
+        f"<div><b style='color:#2e1065'>{title}</b>"
+        f"<div style='color:#6b7280;font-size:.84rem;margin-top:2px'>{description}</div></div>"
+        f"</div>",
+        unsafe_allow_html=True,
     )
 
-# ── Veri Kalitesi Analizi ────────────────────────────────────────────────────
-theme.section("Veri Kalitesi Analizi", "Eğitim öncesi tespit edilen sorunlar")
-
-col_s, col_t = st.columns(2)
-
-with col_s:
-    sorunlar = [
-        ("Çok küçük bbox (alan < %0.1)", 1810, "#dc2626"),
-        ("Görüntü sınırlarını aşan bbox", 109,  "#d97706"),
-        ("Aşırı en-boy oranı (>10x)",     3,    "#ca8a04"),
-        ("Tekrar eden bbox (IoU > 0.80)",  3,    "#ca8a04"),
-    ]
-    for sorun, adet, clr in sorunlar:
-        st.markdown(
-            f"<div style='background:#ffffff;border-left:4px solid {clr};"
-            f"border-radius:0 10px 10px 0;padding:10px 14px;margin-bottom:7px;"
-            f"box-shadow:0 1px 2px rgba(0,0,0,0.05);'>"
-            f"<div style='font-size:0.83rem;color:#444;'>{sorun}</div>"
-            f"<div style='font-weight:700;font-size:1rem;color:{clr};'>{adet:,} adet</div>"
-            f"</div>",
-            unsafe_allow_html=True,
-        )
-
-with col_t:
-    temizlik = [
-        ("bos_arazi etiketi kaldırıldı", "39.119", "Modelin dikkatini dağıtıyordu"),
-        ("Küçük/gürültülü bbox silindi",  "8.434",  "Alan < %0.1 piksel"),
-        ("Sınıf sayısı",                  "4 → 3",  "bos_arazi çıkarıldı"),
-    ]
-    for etiket, deger, aciklama in temizlik:
-        st.markdown(
-            f"<div style='background:#f5f3ff;border:1px solid #ece9fb;"
-            f"border-radius:10px;padding:12px 16px;margin-bottom:8px;'>"
-            f"<div style='display:flex;justify-content:space-between;align-items:center;'>"
-            f"<span style='font-size:0.83rem;color:#4c1d95;font-weight:600;'>{etiket}</span>"
-            f"<span style='font-weight:700;font-size:1rem;color:#7c3aed;'>{deger}</span>"
-            f"</div>"
-            f"<div style='font-size:0.75rem;color:#6d28d9;margin-top:3px;'>{aciklama}</div>"
-            f"</div>",
-            unsafe_allow_html=True,
-        )
-
-    theme.tip(
-        "Bu temizlik işlemi, modelin yanlış sınıfları öğrenmesini engellemiş "
-        "ve hem precision hem recall'u eş zamanlı iyileştirmiştir.",
-        kind="info",
-    )
-
-# ── Model Teknik Detayları ───────────────────────────────────────────────────
-theme.section("Model Teknik Detayları")
-
+theme.section("Tespit Sınıfları ve Karar Mantığı")
 c1, c2, c3 = st.columns(3)
-detaylar = [
-    [("Model", "YOLOv11n"), ("Parametre Sayısı", "~2.6M"), ("Model Boyutu", "5.5 MB")],
-    [("Epoch", "94 / 100"), ("Batch Size", "16"), ("Görüntü Boyutu", "640×640 px")],
-    [("Optimizer", "AdamW"), ("Öğrenme Oranı", "0.001429"), ("GPU", "Tesla T4 — 15 GB")],
+class_cards = [
+    (c1, "olgunlasmis", "Olgunlaşmış", "Hasat ve rekolte hesabına dahil edilir."),
+    (c2, "yetismemis", "Yetişmemiş", "Hasat hazırlık oranını düşürür."),
+    (c3, "yabani_bitki", "Yabani Ot", "Tarla sağlığı ve müdahale önerisini etkiler."),
 ]
-for col, satirlar in zip([c1, c2, c3], detaylar):
-    html = ("<div style='background:#ffffff;border:1px solid #ece9fb;border-radius:12px;"
-            "padding:14px 16px;box-shadow:0 1px 2px rgba(124,58,237,0.05);'>")
-    for k, v in satirlar:
-        html += (
-            f"<div style='display:flex;justify-content:space-between;padding:5px 0;"
-            f"border-bottom:1px solid #f5f3ff;font-size:0.84rem;'>"
-            f"<span style='color:#6d28d9;'>{k}</span>"
-            f"<span style='font-weight:600;color:#2e1065;'>{v}</span></div>"
-        )
-    html += "</div>"
-    col.markdown(html, unsafe_allow_html=True)
+for column, name, label, description in class_cards:
+    color = config.hex_color(name)
+    column.markdown(
+        f"<div style='border-top:4px solid {color};background:#fff;border-radius:10px;"
+        f"padding:14px;min-height:120px;box-shadow:0 1px 3px rgba(0,0,0,.06)'>"
+        f"<div style='font-weight:700;color:{color}'>{label}</div>"
+        f"<code>{name}</code>"
+        f"<div style='font-size:.82rem;color:#6b7280;margin-top:8px'>{description}</div>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+
+st.info(
+    "Renk bazlı sınıflandırma açıkken, lavanta kutusundaki kalibre edilmiş renk "
+    f"yoğunluğu varsayılan olarak **%{DEFAULT_THRESHOLD * 100:.0f} ve üzerindeyse** "
+    "olgunlaşmış; altındaysa yetişmemiş kabul edilir. Eşik analiz ekranından değiştirilebilir."
+)
+
+theme.section("Hesaplama Modeli")
+h1, h2 = st.columns(2)
+with h1:
+    st.markdown("#### Rekolte ve ekonomi")
+    st.code(
+        "Yaş çiçek = olgun bitki × 0.25 kg\n"
+        "Uçucu yağ = yaş çiçek × %2\n"
+        "Tahmini gelir = uçucu yağ × 80 €/kg",
+        language=None,
+    )
+with h2:
+    st.markdown("#### Hasat ve yoğunluk")
+    st.code(
+        "Hasat hazırlığı = olgun / (olgun + yetişmemiş)\n"
+        "Tarla yoğunluğu = seçili HSV pikseli / toplam piksel\n"
+        "Varsayılan HSV = H:40-80, S≥20, V:30-230",
+        language=None,
+    )
+
+theme.section("Teknik Yapı")
+t1, t2, t3 = st.columns(3)
+model_size = config.MODEL_PATH.stat().st_size / (1024 * 1024) if config.MODEL_PATH.exists() else 0
+t1.metric("Model Dosyası", f"{model_size:.1f} MB" if model_size else "Bulunamadı")
+t2.metric("Arayüz", "Streamlit")
+t3.metric("Kayıt", "SQLite")
+
+st.markdown(
+    "- **Görüntü işleme:** OpenCV ve NumPy\n"
+    "- **Nesne tespiti:** Ultralytics YOLOv11 / PyTorch\n"
+    "- **Renk analizi:** Ayarlanabilir HSV sınırları ve morfolojik temizleme\n"
+    "- **Sunum:** Streamlit Cloud üzerinde çok sayfalı uygulama\n"
+    "- **Dışa aktarma:** JPEG, TXT ve GeoJSON/VRA"
+)
+
+theme.tip(
+    "<b>Görselleştirme notu:</b> Mor spektral karşılaştırıcı, görüntü farklarını "
+    "incelemek için kullanılan görsel bir katmandır. Sayısal tarla yoğunluğu ayrı olarak "
+    "kalibre edilmiş HSV maskesinden hesaplanır.",
+    kind="info",
+)
 
 st.divider()
-st.caption("YMH455 Bitirme Projesi · Mustafa BAL (220541003) · 2026")
+st.caption("Lavanta AI · YOLOv11 + renk analizi + tarımsal karar destek sistemi")
